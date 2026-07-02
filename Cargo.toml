@@ -1,0 +1,20 @@
+[package]
+name        = "rocq2md"
+version     = "0.1.0"
+edition     = "2024"
+description = "Converts Rocq files to Markdown"
+license     = "MIT"
+keywords    = ["rocq", "markdown"]
+categories  = ["command-line-utilities", "development-tools"]
+repository  = "https://github.com/matematiflo/rocq2md"
+readme      = "README.md"
+
+[lib]
+name = "rocq2md"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rocq2md"
+path = "src/main.rs"
+
+[dependencies]
