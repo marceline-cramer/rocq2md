@@ -56,8 +56,12 @@ struct ParserState {
     /// environment (tracked via simple keyword counting on the code text).
     proof_depth: usize,
     /// Whether the `--#--` strip marker is currently "open" while accumulating
-    /// Markdown text.
+    /// Markdown or code text.
     strip_mode: bool,
+    /// Whether there was blank space (space/tab) immediately before the
+    /// currently-open `--#--` marker, so a single space can be reinserted
+    /// once the matching closing marker is found.
+    strip_had_space_before: bool,
     /// 1-indexed line number, used for warning messages.
     line_no: usize,
 }
@@ -69,6 +73,7 @@ impl ParserState {
             convert: false,
             proof_depth: 0,
             strip_mode: false,
+            strip_had_space_before: false,
             line_no: 1,
         }
     }
@@ -218,28 +223,60 @@ pub fn build_segments(content: &str) -> (Vec<Segment>, ConversionReport) {
             continue;
         }
 
-        // Regular character inside a comment.
-        if state.convert {
-            if c == '-'
-                && i + 4 < n
-                && chars[i + 1] == '-'
-                && chars[i + 2] == '#'
-                && chars[i + 3] == '-'
-                && chars[i + 4] == '-'
-            {
-                let was_open = state.strip_mode;
-                state.strip_mode = !state.strip_mode;
-                if was_open {
-                    report.stripped_blocks += 1;
+        // Regular character inside a comment. The `--#-- ... --#--` strip
+        // marker is honored whether or not this comment is being converted
+        // to Markdown: marked text (and the markers themselves) are always
+        // removed, along with any redundant blank space left at the seam.
+        if c == '-'
+            && i + 4 < n
+            && chars[i + 1] == '-'
+            && chars[i + 2] == '#'
+            && chars[i + 3] == '-'
+            && chars[i + 4] == '-'
+        {
+            let buf = if state.convert { &mut md_buf } else { &mut code_buf };
+            let was_open = state.strip_mode;
+
+            if !was_open {
+                // Opening marker: trim trailing blank spaces/tabs already
+                // accumulated, remembering whether there were any so we can
+                // decide whether to reinsert a single space once the
+                // matching closing marker is found.
+                let mut had_space = false;
+                while buf.ends_with(' ') || buf.ends_with('\t') {
+                    buf.pop();
+                    had_space = true;
                 }
+                state.strip_had_space_before = had_space;
+                state.strip_mode = true;
                 i += 5;
                 continue;
+            } else {
+                // Closing marker: also skip blank spaces/tabs immediately
+                // following it, then reinsert a single space if there was
+                // blank space on either side of the removed block.
+                state.strip_mode = false;
+                report.stripped_blocks += 1;
+                i += 5;
+
+                let mut had_space_after = false;
+                while i < n && (chars[i] == ' ' || chars[i] == '\t') {
+                    i += 1;
+                    had_space_after = true;
+                }
+                if (state.strip_had_space_before || had_space_after) && !buf.is_empty() {
+                    buf.push(' ');
+                }
+                continue;
             }
-            if !state.strip_mode {
+        }
+
+        if !state.strip_mode {
+            if state.convert {
                 md_buf.push(c);
+            } else {
+                code_buf.push(c);
             }
-        } else {
-            code_buf.push(c);
         }
         if c == '\n' {
             state.line_no += 1;
@@ -548,7 +585,7 @@ mod tests {
         let input = "(* Keep this --#-- remove this --#-- keep this too *)\nDefinition foo := 1.";
         let (segments, report) = build_segments(input);
         match &segments[0] {
-            Segment::Markdown(c) => assert_eq!(c, "Keep this  keep this too"),
+            Segment::Markdown(c) => assert_eq!(c, "Keep this keep this too"),
             _ => panic!("expected markdown segment"),
         }
         assert_eq!(report.stripped_blocks, 1);
@@ -569,6 +606,42 @@ mod tests {
             _ => panic!("expected markdown segment"),
         }
         assert_eq!(report.stripped_blocks, 1);
+    }
+
+    #[test]
+    fn test_strip_marker_in_comment_not_at_column_zero() {
+        // The comment is kept as code (it does not start at column 0), but
+        // the --#-- marked text should still be removed, along with the
+        // markers themselves and the redundant blank space at the seam.
+        let input = " (* Keep this --#-- remove this --#-- keep this too *)\nDefinition foo := 1.";
+        let (segments, report) = build_segments(input);
+        assert_eq!(report.stripped_blocks, 1);
+        match &segments[0] {
+            Segment::Code(c) => {
+                assert!(c.contains("(* Keep this keep this too *)"));
+                assert!(!c.contains("remove this"));
+                assert!(!c.contains("--#--"));
+            }
+            _ => panic!("expected code segment"),
+        }
+    }
+
+    #[test]
+    fn test_strip_marker_in_comment_inside_proof() {
+        // The comment is kept as code because it is inside a proof, but the
+        // --#-- marked text should still be removed.
+        let input = "Lemma foo : True.\nProof.\n(* Keep this --#-- remove this --#-- keep this too *)\ntrivial.\nQed.";
+        let (segments, report) = build_segments(input);
+        assert!(report.warnings.is_empty());
+        assert_eq!(report.stripped_blocks, 1);
+        match &segments[0] {
+            Segment::Code(c) => {
+                assert!(c.contains("(* Keep this keep this too *)"));
+                assert!(!c.contains("remove this"));
+                assert!(!c.contains("--#--"));
+            }
+            _ => panic!("expected code segment"),
+        }
     }
 
     #[test]

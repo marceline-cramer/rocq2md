@@ -1,6 +1,8 @@
 # rocq2md
 
-A command-line tool written in Rust that converts Rocq files (`.v`) to Markdown documents (`.md`).
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A command-line utility written in Rust that converts Rocq files (`.v`) to Markdown (`.md`).
 
 ## Description
 
@@ -69,7 +71,7 @@ Check location (should be `~/.cargo/bin`):
 which rocq2md
 ```
 
-Alternatively, you can [use cargo](#rust-executable) to download and install the executable directly from [crates.io](https://lib.rs/crates/rocq2md).
+Alternatively, you can [use cargo](#rust-executable) to install the package directly from [crates.io](https://crates.io/crates/rocq2md).
 
 ## Commands
 
@@ -103,45 +105,67 @@ rocq2md test_files converted_files
 - Comments that are not converted generate a warning during conversion. The reason for the warning is logged into the `rocq2md.log` file (in the absence of any warning, no log file is created).
 - Comments contained in a proof (are not converted and) do not generate a warning. The total number of warnings is printed to the console after conversion.
 
-## Examples
+## Basic usage
 
-### Basic usage
+### Test file
+
+The test file `sample.v`
 
 ````rocq
-(* # Introduction
+(* # Factorial
 
-This module defines a trivial lemma. *)
+Let us introduce the factorial function. --#-- side comment, removed from comversion ---#-- It is defined recursively. *)
 
-Definition foo := 1. (* not converted: this comment does not start a line *)
-
- (* not converted: does not start at columnn 0 *)
-
-Lemma foo_eq : foo = 1.
-Proof.
-  (* This comment is inside a proof: kept as code, no warning. *)
-  reflexivity.
-Qed.
-````
-
-produces:
-
-````markdown
-# Introduction
-
-This module defines a trivial lemma.
-
-```rocq
-Definition foo := 1. (* not converted: is not located at the start of a line *)
+Fixpoint fact (n : nat) := (* not converted: inline trailing comment *)
+  match n with
+  | 0   => 1
+  | S n' => n * fact n'  (* note the role of `n'` here --#-- extra note: this comment should be removed --#-- *)
+  end.
 
   (* not converted: does not start at columnn 0 *)
 
-Lemma foo_eq : foo = 1.
+Compute fact 5.
+
+Lemma fact_succ (n' : nat) : fact (S n') = S n' * fact n'.
 Proof.
-  (* This comment is inside a proof: kept as code, no warning. *)
   reflexivity.
+  (* the proof holds by reflexivity --#-- this comment is inside a proof and is not converted to text --#-- *)
+Qed.
+````
+
+is converted to
+
+````markdown
+# Factorial
+
+Let us introduce the factorial function. It is defined recursively.
+
+```rocq
+Fixpoint fact (n : nat) := (* not converted: inline trailing comment *)
+  match n with
+  | 0   => 1
+  | S n' => n * fact n'  (* note the role of `n'` here *)
+  end.
+
+  (* not converted: does not start at columnn 0 *)
+
+Compute fact 5.
+
+Lemma fact_succ (n' : nat) : fact (S n') = S n' * fact n'.
+Proof.
+  reflexivity.
+  (* the proof holds by reflexivity *)
 Qed.
 ```
 ````
+
+and produces the following message.
+
+```bash
+Converting test_files/sample.v to test_files/sample.md
+3 warning(s): 3 unconverted comment(s) and 0 unclosed comment(s); see rocq2md.log for details.
+Note: 3 block(s) ignored due to --#-- markers.
+```
 
 ### Ignored text
 
@@ -167,13 +191,13 @@ Kept again. *)
 
 ### Rust executable
 
-You can install `rocq2md` directly from [crates.io](https://lib.rs/crates/rocq2md):
+You can install `rocq2md` from [crates.io](https://crates.io/crates/rocq2md):
 
 ```bash
 cargo install rocq2md
 ```
 
-This will download, compile, and install the package in your `~/.cargo/bin` directory, making it available in your PATH.
+This will install the package in your `~/.cargo/bin` directory, making it available in your PATH.
 
 Alternatively, you can [install your locally built version](#adding-the-executable-to-your-rust-environment):
 
@@ -192,16 +216,14 @@ cargo test
 
 ### Acknowledgments
 
-This project follows the design of the following projects, adapting it from Lean to Rocq:
-
 - [arthurpaulino/lean2md](https://github.com/arthurpaulino/lean2md), the original Lean to Markdown conversion tool, written in Python.
 - [Seasawher/mdgen](https://github.com/Seasawher/mdgen), based on `lean2md` and written in Lean (to generate documentation directly inside a Lean project).
 - [fosterfarrell9/lean2md](https://github.com/fosterfarrell9/lean2md), based on `mdgen` and written in Rust.
 
 ### License
 
-This project is licensed under the MIT License.
+This software is published under an [MIT License](https://opensource.org/licenses/MIT).
 
 ### Contributing
 
-Contributions are welcome. Feel free to open an issue or submit a pull request.
+To contribute, open an issue or submit a pull request.
