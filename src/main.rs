@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let tgt = src.with_extension("md");
                 return process_file(&src, &tgt);
             } else if src.is_dir() {
-                // Case: rocq2md <rocq_src_dir> (converts in place)
+                // Case: rocq2md <src_dir> (converts in place)
                 return process_directory(&src, &src);
             }
         }
@@ -27,10 +27,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let tgt = PathBuf::from(&args[2]);
 
         if src.is_file() {
-            // Case: rocq2md <rocq_src_file> <md_tgt_file>
+            // Case: rocq2md <src_file> <tgt_file>
             return process_file(&src, &tgt);
         } else if src.is_dir() {
-            // Case: rocq2md <rocq_src_dir> <md_tgt_dir>
+            // Case: rocq2md <src_dir> <tgt_dir>
             return process_directory(&src, &tgt);
         }
     }
